@@ -44,7 +44,7 @@ def p2p_echo():
     except socket.error:
         print("Connection closed unexpectedly")
 
-
+#....
 if __name__ == "__main__":
     # Start a new thread to accept P2P echo or P2P upload requests
     thr = threading.Thread(target=bot_server)

@@ -1,6 +1,7 @@
 from typing import Tuple
 from Crypto.Hash import SHA256
 from lib.helpers import read_hex
+import math
 
 # Project TODO: Is this the best choice of prime? Why? Why not? Feel free to replace this!
 
@@ -21,6 +22,13 @@ prime = read_hex(raw_prime)
 def create_dh_key() -> Tuple[int, int]:
     # Creates a Diffie-Hellman key
     # Returns (public, private)
+
+    # Prime of id 14
+    prime = pow(2, 2048) - pow(2, 1984) - 1 + pow(2, 64) * ( pow(2, 1918) * math.pi + 124476 )
+    # Generator
+    gen = 2
+    # random a
+
     return (1, 1)
 
 

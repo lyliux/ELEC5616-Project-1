@@ -24,7 +24,7 @@ def create_dh_key() -> Tuple[int, int]:
     # Returns (public, private)
 
     # Prime of id 14
-    prime = pow(2, 2048) - pow(2, 1984) - 1 + pow(2, 64) * ( pow(2, 1918) * math.pi + 124476 )
+    # prime = pow(2, 2048) - pow(2, 1984) - 1 + pow(2, 64) * ( pow(2, 1918) * math.pi + 124476 )
     # Generator
     gen = 2
     # random a

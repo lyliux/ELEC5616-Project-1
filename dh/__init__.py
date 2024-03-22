@@ -28,6 +28,10 @@ def create_dh_key() -> Tuple[int, int]:
     # Generator
     gen = 2
     # random a
+    # note right not it's just like, a random ass value
+    # we still need to work out how exactly we need to generate this number
+    # and what size it should be
+    # a = random_bytes(l) + b"00000000"
 
     return (1, 1)
 

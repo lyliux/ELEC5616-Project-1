@@ -35,15 +35,11 @@ def create_dh_key() -> Tuple[int, int]:
     # Generator
     gen = 2
 
-    # 128 bit random a, public key
-    # check the implementation of this
-    # idk if the 30 string length is fine???
-    # randString = ''.join(random.choices(string.ascii_uppercase + string.digits, k = 30)).encode()
-    # a = randString + b"00000000"
-    # privKey = secrets.token_bytes(16)
+    # 128 bit random a, private key
     random.seed(datetime.datetime.now())
     privKey = random.getrandbits(128)
 
+    # generate public key
     pubKey = (gen ** privKey) % prime
 
     return (pubKey, privKey)

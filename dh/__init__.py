@@ -1,7 +1,13 @@
 from typing import Tuple
 from Crypto.Hash import SHA256
 from lib.helpers import read_hex
+
 import math
+from decimal import *
+import random
+import string
+import secrets
+import datetime
 
 # Project TODO: Is this the best choice of prime? Why? Why not? Feel free to replace this!
 
@@ -24,16 +30,23 @@ def create_dh_key() -> Tuple[int, int]:
     # Returns (public, private)
 
     # Prime of id 14
-    # prime = pow(2, 2048) - pow(2, 1984) - 1 + pow(2, 64) * ( pow(2, 1918) * math.pi + 124476 )
+    prime = pow(2, 2048) - pow(2, 1984) - 1 + pow(2, 64) * ((pow(2, 1918) * Decimal(math.pi)) + 124476)
+
     # Generator
     gen = 2
-    # random a
-    # note right not it's just like, a random ass value
-    # we still need to work out how exactly we need to generate this number
-    # and what size it should be
-    # a = random_bytes(l) + b"00000000"
 
-    return (1, 1)
+    # 128 bit random a, public key
+    # check the implementation of this
+    # idk if the 30 string length is fine???
+    # randString = ''.join(random.choices(string.ascii_uppercase + string.digits, k = 30)).encode()
+    # a = randString + b"00000000"
+    # privKey = secrets.token_bytes(16)
+    random.seed(datetime.datetime.now())
+    privKey = random.getrandbits(128)
+
+    pubKey = (gen ** privKey) % prime
+
+    return (pubKey, privKey)
 
 
 def calculate_dh_secret(their_public: int, my_private: int) -> bytes:

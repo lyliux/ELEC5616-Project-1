@@ -4,6 +4,7 @@ import secrets
 from dh import create_dh_key, calculate_dh_secret
 from .xor import XOR
 from lib.helpers import appendMac, macCheck, appendSalt, generate_random_string
+from Crypto.Cipher import AES
 
 
 class StealthConn(object):
@@ -33,8 +34,22 @@ class StealthConn(object):
         if self.shared_secret:
             # Encrypt the message
             # Project TODO: Is XOR the best cipher here? Why not? Use a more secure cipher (from the pycryptodome library)
+
+            # encrypt using AES (block mode ___) (CFB or OFB mode???)
+
+            # NOT FINISHED!
+            # use nonce to avoid replay attacks
+            # key = b'Sixteen byte key'
+            # cipher = AES.new(key, AES.MODE_EAX)
+            # nonce = cipher.nonce
+            # data_to_send, tag = cipher.encrypt_and_digest(data)
+
             cipher = XOR(self.shared_secret)
-            data_to_send = cipher.encrypt(data)
+            data_to_send, tag = cipher.encrypt(data)
+
+            # Append MAC onto end of message
+            appendMac(data_to_send, self.shared_secret)
+
             if self.verbose:
                 print()
                 print("Original message : {}".format(data))
@@ -55,12 +70,19 @@ class StealthConn(object):
         unpacked_contents = struct.unpack("H", pkt_len_packed)
         pkt_len = unpacked_contents[0]
 
+
         if self.shared_secret:
 
             encrypted_data = self.conn.recv(pkt_len)
             # Project TODO: as in send(), change the cipher here.
             cipher = XOR(self.shared_secret)
             original_msg = cipher.decrypt(encrypted_data)
+
+            # Perform MAC check on incoming message
+            if not macCheck(original_msg, encrypted_data, self.shared_secret):
+                print()
+                print("MAC Authentication failed")
+                return ""
 
             if self.verbose:
                 print()

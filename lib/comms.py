@@ -71,8 +71,7 @@ class StealthConn(object):
         unpacked_contents = struct.unpack("H", pkt_len_packed)
         pkt_len = unpacked_contents[0]
 
-        if self.shared_secret:q
-
+        if self.shared_secret:
             encrypted_data = self.conn.recv(pkt_len)
             # Project TODO: as in send(), change the cipher here.
             # cipher = XOR(self.shared_secret)

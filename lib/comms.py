@@ -29,6 +29,7 @@ class StealthConn(object):
         self.verbose = True  # verbose
         self.shared_secret = None
         self.initiate_session()
+        self.black_list_map = {}
 
     def initiate_session(self):
         # Perform the initial connection handshake for agreeing on a shared secret
@@ -73,7 +74,6 @@ class StealthConn(object):
         pkt_len_packed = self.conn.recv(struct.calcsize("H"))
         unpacked_contents = struct.unpack("H", pkt_len_packed)
         pkt_len = unpacked_contents[0]
-
         if self.shared_secret:
             encrypted_data_with_mac = self.conn.recv(pkt_len)
             ## check MAC
@@ -87,7 +87,10 @@ class StealthConn(object):
             if MAC_INFO != calculate_mac(self.shared_secret, encrypted_data).encode():
             # print("对对对对赌地")
                 print("MAC verification error")
-                return
+                # self.black_list_map[self.conn.getsockname()]
+                # count = self.black_list_map.get(self.conn.getsockname(),)
+                ## task 4 if ip try too many times in Error MAC, put the ip in black list
+                return "MAC error"
             # Project TODO: as in send(), change the cipher here.
             # cipher = XOR(self.shared_secret)
 

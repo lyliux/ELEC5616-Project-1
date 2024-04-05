@@ -8,6 +8,8 @@ from lib.files import p2p_download_file
 # This is primarily so we don't try to talk to ourselves
 server_port = 1337
 
+black_list_map = {}
+
 
 def find_bot():
     print("Finding another bot...")
@@ -41,6 +43,9 @@ def echo_server(sconn):
 
 def accept_connection(conn):
     try:
+        if black_list_map.get(conn.getsockname(), 0) > 5:
+            raise ConnectionRefusedError()
+        
         sconn = StealthConn(conn, server=True)
         # The sender is either going to chat to us or send a file
         cmd = sconn.recv()
@@ -48,6 +53,9 @@ def accept_connection(conn):
             echo_server(sconn)
         elif cmd == b"FILE":
             p2p_download_file(sconn)
+        elif cmd == "MAC error":
+            count = black_list_map.get(conn.getsockname(), 0) + 1
+
     except socket.error:
         print("Connection closed unexpectedly")
 

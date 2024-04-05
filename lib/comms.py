@@ -1,3 +1,4 @@
+import hashlib
 import struct
 import secrets
 
@@ -6,7 +7,7 @@ from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from dh import create_dh_key, calculate_dh_secret
-from .xor import XOR
+
 from Crypto.Cipher import AES
 
 from lib.helpers import appendMac, macCheck, appendSalt, generate_random_string
@@ -47,10 +48,8 @@ class StealthConn(object):
         if self.shared_secret:
             # Encrypt the message
             # Project TODO: Is XOR the best cipher here? Why not? Use a more secure cipher (from the pycryptodome library)
-
-            # cipher = XOR(self.shared_secret)
-            # data_to_send = cipher.encrypt(data)
             data_to_send = aes_encrypt(self.shared_secret, data)
+
             if self.verbose:
                 print()
                 print("Original message : {}".format(data))
@@ -76,7 +75,7 @@ class StealthConn(object):
             # Project TODO: as in send(), change the cipher here.
             # cipher = XOR(self.shared_secret)
 
-            original_msg = aes_decrypt(self.shared_secret, encrypted_data )
+            original_msg = aes_decrypt(self.shared_secret, encrypted_data)
 
             if self.verbose:
                 print()
@@ -89,6 +88,8 @@ class StealthConn(object):
             original_msg = self.conn.recv(pkt_len)
 
         return original_msg
+
+    ## md5(concat share.screct key.hen()  + data ) as MAC
 
     def close(self):
         self.conn.close()
@@ -123,11 +124,19 @@ def aes_decrypt(key, ciphertext):
     return plaintext
 
 
+def calculate_mac(share_secret, data):
+    # 提取共享密钥的后5位
+    last_five_bits = share_secret[-5:]
+    # 将共享密钥的后5位与数据拼接
+    combined_data = last_five_bits + data
+    # 计算拼接后数据的 MD5 值作为 MAC
+    mac = hashlib.md5(combined_data).hexdigest()
+    return mac
+
+
 # 65e35817eaaf7d9345226c9ef0972289d354c4875006114643af4b19f462471c
 if __name__ == "__main__":
     tt = b'e\xe3X\x17\xea\xaf}\x93E"l\x9e\xf0\x97"\x89\xd3T\xc4\x87P\x06\x11FC\xafK\x19\xf4bG\x1c'
 
-    print(aes_decrypt(tt,aes_encrypt(tt, b"haha")))
-
-
-
+    print(aes_decrypt(tt, aes_encrypt(tt, b"haha")))
+    print(calculate_mac(tt, b"haha"))

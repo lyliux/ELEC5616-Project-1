@@ -49,6 +49,10 @@ class StealthConn(object):
             # Encrypt the message
             # Project TODO: Is XOR the best cipher here? Why not? Use a more secure cipher (from the pycryptodome library)
             data_to_send = aes_encrypt(self.shared_secret, data)
+            # print("---------------")
+            # print(self.shared_secret)
+            # print(data)
+            data_to_send = data_to_send + calculate_mac(self.shared_secret, data_to_send).encode()
 
             if self.verbose:
                 print()
@@ -71,7 +75,19 @@ class StealthConn(object):
         pkt_len = unpacked_contents[0]
 
         if self.shared_secret:
-            encrypted_data = self.conn.recv(pkt_len)
+            encrypted_data_with_mac = self.conn.recv(pkt_len)
+            ## check MAC
+            MAC_INFO = encrypted_data_with_mac[-32:]
+            encrypted_data = encrypted_data_with_mac[:-32]
+            # print("---------------")
+            # print(MAC_INFO)
+            # print(encrypted_data)
+            # print(self.shared_secret)
+            # print(calculate_mac(self.shared_secret, encrypted_data).encode())
+            if MAC_INFO != calculate_mac(self.shared_secret, encrypted_data).encode():
+            # print("对对对对赌地")
+                print("MAC verification error")
+                return
             # Project TODO: as in send(), change the cipher here.
             # cipher = XOR(self.shared_secret)
 
@@ -88,7 +104,6 @@ class StealthConn(object):
             original_msg = self.conn.recv(pkt_len)
 
         return original_msg
-
     ## md5(concat share.screct key.hen()  + data ) as MAC
 
     def close(self):
@@ -134,9 +149,16 @@ def calculate_mac(share_secret, data):
     return mac
 
 
+
 # 65e35817eaaf7d9345226c9ef0972289d354c4875006114643af4b19f462471c
 if __name__ == "__main__":
     tt = b'e\xe3X\x17\xea\xaf}\x93E"l\x9e\xf0\x97"\x89\xd3T\xc4\x87P\x06\x11FC\xafK\x19\xf4bG\x1c'
-
-    print(aes_decrypt(tt, aes_encrypt(tt, b"haha")))
+    data =    b"haha"
+    print(aes_decrypt(tt, aes_encrypt(tt, data)))
     print(calculate_mac(tt, b"haha"))
+
+    re =  data + calculate_mac(tt, data).encode()
+    truncated_byte_string = re[-128:]
+    print(re)
+
+

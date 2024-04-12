@@ -1,6 +1,8 @@
 import hashlib
 import struct
 import secrets
+import random
+from datetime import datetime
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
@@ -30,7 +32,7 @@ class StealthConn(object):
         self.verbose = True  # verbose
         self.shared_secret = None
         self.initiate_session()
-        self.black_list_map = {}
+
 
     def initiate_session(self):
         # Perform the initial connection handshake for agreeing on a shared secret
@@ -54,6 +56,9 @@ class StealthConn(object):
 
             # Append MAC onto end of message, deliminate with hex byte 03
             before_encrypt = data
+            random.seed(datetime.datetime.now())
+            nonce = random.getrandbits(16)
+            before_encrypt += nonce
             before_encrypt = appendMac(before_encrypt, self.shared_secret)
             data_to_send = aes_encrypt(self.shared_secret, before_encrypt)
 
@@ -87,12 +92,14 @@ class StealthConn(object):
             # Split original message from HMAC
             original_msg = b''
             hmac = b''
-            SHA256_counter = 0
+            SHA256_counter = 1
 
             for byte in reversed(decoded_message):
                 byte = byte.to_bytes(1, "big")
 
-                if SHA256_counter > 31:
+                if SHA256_counter == 32:
+                    nonce = byte
+                elif SHA256_counter > 32:
                     original_msg = byte + original_msg
                 else:
                     hmac = byte + hmac
@@ -123,12 +130,11 @@ class StealthConn(object):
 
 
 def aes_encrypt(key, plaintext):
-    # 使用共享密钥作为 AES 密钥
+    # use shared key as key of AES
     backend = default_backend()
-    cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=backend)
+    cipher = Cipher(algorithms.AES(key), modes.OFB(), backend=backend)
     encryptor = cipher.encryptor()
-
-    # 添加填充
+    # add padding
     padder = padding.PKCS7(algorithms.AES.block_size).padder()
     padded_plaintext = padder.update(plaintext) + padder.finalize()
 
@@ -137,14 +143,14 @@ def aes_encrypt(key, plaintext):
 
 
 def aes_decrypt(key, ciphertext):
-    # 使用共享密钥作为 AES 密钥
+    # use shared key as key of AES
     backend = default_backend()
-    cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=backend)
+    cipher = Cipher(algorithms.AES(key), modes.OFB(), backend=backend)
     decryptor = cipher.decryptor()
 
     padded_plaintext = decryptor.update(ciphertext) + decryptor.finalize()
 
-    # 删除填充
+    # delete padding
     unpadder = padding.PKCS7(algorithms.AES.block_size).unpadder()
     plaintext = unpadder.update(padded_plaintext) + unpadder.finalize()
 

@@ -45,14 +45,16 @@ class StealthConn(object):
             # data_to_send, tag = cipher.encrypt_and_digest(data)
 
             cipher = XOR(self.shared_secret)
-            data_to_send, tag = cipher.encrypt(data)
 
-            # Append MAC onto end of message
-            appendMac(data_to_send, self.shared_secret)
+            # Append MAC onto end of message, deliminate with hex byte 03
+            before_encrypt = data
+            before_encrypt = appendMac(before_encrypt, self.shared_secret)
+            data_to_send = cipher.encrypt(before_encrypt)
 
             if self.verbose:
                 print()
                 print("Original message : {}".format(data))
+                print("Original message + HMAC : {}".format(before_encrypt))
                 print("Encrypted data: {}".format(repr(data_to_send)))
                 print("Sending packet of length: {}".format(len(data_to_send)))
                 print()
@@ -70,24 +72,57 @@ class StealthConn(object):
         unpacked_contents = struct.unpack("H", pkt_len_packed)
         pkt_len = unpacked_contents[0]
 
-
         if self.shared_secret:
 
             encrypted_data = self.conn.recv(pkt_len)
             # Project TODO: as in send(), change the cipher here.
             cipher = XOR(self.shared_secret)
-            original_msg = cipher.decrypt(encrypted_data)
+
+            # Split original message from HMAC
+            decoded_message = cipher.decrypt(encrypted_data)
+            original_msg = b''
+            hmac = b''
+            deliminator = False
+            SHA256_counter = 0
+
+            for byte in reversed(decoded_message):
+                byte = byte.to_bytes(1, "big")
+                print(byte)
+                print(SHA256_counter)
+
+                # if byte == b'\x00':
+                #     deliminator = True
+                # elif deliminator:
+                #     hmac += byte
+                # else:
+                #     original_msg += byte
+
+                if SHA256_counter > 31:
+                    original_msg = byte + original_msg
+                else:
+                    hmac = byte + hmac
+
+                SHA256_counter += 1
+
+            print()
+            print("splitted")
+            print(original_msg)
+            print(hmac)
 
             # Perform MAC check on incoming message
-            if not macCheck(original_msg, encrypted_data, self.shared_secret):
+            if not macCheck(original_msg, hmac, self.shared_secret):
                 print()
                 print("MAC Authentication failed")
-                return ""
+                # return ""
+            else:
+                print()
+                print("YIPPEPEEEEPEPEE!!!!")
 
             if self.verbose:
                 print()
                 print("Receiving message of length: {}".format(len(encrypted_data)))
                 print("Encrypted data: {}".format(repr(encrypted_data)))
+                print("Original message + HMAC : {}".format(decoded_message))
                 print("Original message: {}".format(original_msg))
                 print()
 

@@ -39,12 +39,12 @@ def create_dh_key() -> Tuple[int, int]:
     # Generator
     gen = 2
 
-    # 128-bit random a, private key
+    # 128-bit random private key
     random.seed(datetime.datetime.now())
     priv_key = random.getrandbits(128)
 
     # generate public key
-    pub_key = (gen ** priv_key) % prime
+    pub_key = pow(gen, priv_key, prime)
 
     return pub_key, priv_key
 

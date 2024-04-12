@@ -1,6 +1,7 @@
 import string
 from Crypto.Hash import HMAC, SHA256
 import secrets
+from .xor import XOR
 
 def read_hex(data):
     # Remove any spaces or newlines
@@ -22,7 +23,15 @@ def appendMac(data, secret):
     ## return data with MAC appended to it.
     h = HMAC.new(secret, digestmod=SHA256)
     h.update(data)
-    return data + bytes.fromhex(h.hexdigest())
+    new_h = bytes.fromhex(h.hexdigest())
+
+    print()
+    print("THIS IS THE MAC THAT WAS ADDED")
+    print(new_h)
+
+    # return data + b'\x00' + new_h
+    return data + new_h
+
 
 def macCheck(data, hmac, secret):
     ## return a boolean representing whether the mac is correct or not.
@@ -30,6 +39,7 @@ def macCheck(data, hmac, secret):
     h.update(data)
     try:
         h.hexverify(hmac.hex())
+        # h.hexverify(hex(hmac))
         return True
     except:
         return False

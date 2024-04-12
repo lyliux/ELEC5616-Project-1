@@ -55,8 +55,7 @@ class StealthConn(object):
             # Append MAC onto end of message, deliminate with hex byte 03
             before_encrypt = data
             before_encrypt = appendMac(before_encrypt, self.shared_secret)
-            data_to_send = aes_encrypt(self.shared_secret, before_encrypt).encode()
-#             data_to_send = aes_encrypt(self.shared_secret, before_encrypt)
+            data_to_send = aes_encrypt(self.shared_secret, before_encrypt)
 
             if self.verbose:
                 print()
@@ -79,29 +78,15 @@ class StealthConn(object):
         unpacked_contents = struct.unpack("H", pkt_len_packed)
         pkt_len = unpacked_contents[0]
         if self.shared_secret:
-            encrypted_data_with_mac = self.conn.recv(pkt_len)
-            ## check MAC
-            MAC_INFO = encrypted_data_with_mac[-32:]
-            encrypted_data = encrypted_data_with_mac[:-32]
-            # print("---------------")
-            # print(MAC_INFO)
-            # print(encrypted_data)
-            # print(self.shared_secret)
-            # print(calculate_mac(self.shared_secret, encrypted_data).encode())
-            if MAC_INFO != calculate_mac(self.shared_secret, encrypted_data).encode():
-            # print("对对对对赌地")
-                print("MAC verification error")
-                # self.black_list_map[self.conn.getsockname()]
-                # count = self.black_list_map.get(self.conn.getsockname(),)
-                ## task 4 if ip try too many times in Error MAC, put the ip in black list
-                return "MAC error"
-            # Project TODO: as in send(), change the cipher here.
+
+            encrypted_data = self.conn.recv(pkt_len)
+
+            # Decrypt the recieved data
+            decoded_message = aes_decrypt(self.shared_secret, encrypted_data)
 
             # Split original message from HMAC
-            decoded_message = aes_decrypt(self.shared_secret, encrypted_data)
             original_msg = b''
             hmac = b''
-            deliminator = False
             SHA256_counter = 0
 
             for byte in reversed(decoded_message):
@@ -118,7 +103,7 @@ class StealthConn(object):
             if not macCheck(original_msg, hmac, self.shared_secret):
                 print()
                 print("MAC Authentication failed")
-                # return ""
+                return ""
 
             if self.verbose:
                 print()
@@ -132,7 +117,6 @@ class StealthConn(object):
             original_msg = self.conn.recv(pkt_len)
 
         return original_msg
-    ## md5(concat share.screct key.hen()  + data ) as MAC
 
     def close(self):
         self.conn.close()

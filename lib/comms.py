@@ -11,6 +11,7 @@ from dh import create_dh_key, calculate_dh_secret
 from Crypto.Cipher import AES
 
 from lib.helpers import appendMac, macCheck, appendSalt, generate_random_string
+from Crypto.Cipher import AES
 
 
 # Traditional modes of operations for symmetric ciphers:
@@ -49,15 +50,18 @@ class StealthConn(object):
         if self.shared_secret:
             # Encrypt the message
             # Project TODO: Is XOR the best cipher here? Why not? Use a more secure cipher (from the pycryptodome library)
-            data_to_send = aes_encrypt(self.shared_secret, data)
-            # print("---------------")
-            # print(self.shared_secret)
-            # print(data)
-            data_to_send = data_to_send + calculate_mac(self.shared_secret, data_to_send).encode()
+            # encrypt using AES (block mode ___) (CFB or OFB mode???)
+
+            # Append MAC onto end of message, deliminate with hex byte 03
+            before_encrypt = data
+            before_encrypt = appendMac(before_encrypt, self.shared_secret)
+            data_to_send = aes_encrypt(self.shared_secret, before_encrypt).encode()
+#             data_to_send = aes_encrypt(self.shared_secret, before_encrypt)
 
             if self.verbose:
                 print()
                 print("Original message : {}".format(data))
+                print("Original message + HMAC : {}".format(before_encrypt))
                 print("Encrypted data: {}".format(repr(data_to_send)))
                 print("Sending packet of length: {}".format(len(data_to_send)))
                 print()
@@ -92,14 +96,35 @@ class StealthConn(object):
                 ## task 4 if ip try too many times in Error MAC, put the ip in black list
                 return "MAC error"
             # Project TODO: as in send(), change the cipher here.
-            # cipher = XOR(self.shared_secret)
 
-            original_msg = aes_decrypt(self.shared_secret, encrypted_data)
+            # Split original message from HMAC
+            decoded_message = aes_decrypt(self.shared_secret, encrypted_data)
+            original_msg = b''
+            hmac = b''
+            deliminator = False
+            SHA256_counter = 0
+
+            for byte in reversed(decoded_message):
+                byte = byte.to_bytes(1, "big")
+
+                if SHA256_counter > 31:
+                    original_msg = byte + original_msg
+                else:
+                    hmac = byte + hmac
+
+                SHA256_counter += 1
+
+            # Perform MAC check on incoming message
+            if not macCheck(original_msg, hmac, self.shared_secret):
+                print()
+                print("MAC Authentication failed")
+                # return ""
 
             if self.verbose:
                 print()
                 print("Receiving message of length: {}".format(len(encrypted_data)))
                 print("Encrypted data: {}".format(repr(encrypted_data)))
+                print("Original message + HMAC : {}".format(decoded_message))
                 print("Original message: {}".format(original_msg))
                 print()
 
@@ -140,28 +165,3 @@ def aes_decrypt(key, ciphertext):
     plaintext = unpadder.update(padded_plaintext) + unpadder.finalize()
 
     return plaintext
-
-
-def calculate_mac(share_secret, data):
-    # 提取共享密钥的后5位
-    last_five_bits = share_secret[-5:]
-    # 将共享密钥的后5位与数据拼接
-    combined_data = last_five_bits + data
-    # 计算拼接后数据的 MD5 值作为 MAC
-    mac = hashlib.md5(combined_data).hexdigest()
-    return mac
-
-
-
-# 65e35817eaaf7d9345226c9ef0972289d354c4875006114643af4b19f462471c
-if __name__ == "__main__":
-    tt = b'e\xe3X\x17\xea\xaf}\x93E"l\x9e\xf0\x97"\x89\xd3T\xc4\x87P\x06\x11FC\xafK\x19\xf4bG\x1c'
-    data =    b"haha"
-    print(aes_decrypt(tt, aes_encrypt(tt, data)))
-    print(calculate_mac(tt, b"haha"))
-
-    re =  data + calculate_mac(tt, data).encode()
-    truncated_byte_string = re[-128:]
-    print(re)
-
-

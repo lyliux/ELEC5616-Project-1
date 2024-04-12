@@ -2,10 +2,12 @@ from typing import Tuple
 from Crypto.Hash import SHA256
 from lib.helpers import read_hex
 import random
+import datetime
 
 # Project TODO: Is this the best choice of prime? Why? Why not? Feel free to replace this!
+# https://crypto.stackexchange.com/questions/64003/choosing-good-entropy-g-and-p-for-a-classic-diffie-hellman-key-exchange
 
-# 1536 bit safe prime for Diffie-Hellman key exchange
+# 3072 bit safe prime for Diffie-Hellman key exchange
 # obtained from RFC 3526
 raw_prime = """FFFFFFFF FFFFFFFF C90FDAA2 2168C234 C4C6628B 80DC1CD1
       29024E08 8A67CC74 020BBEA6 3B139B22 514A0879 8E3404DD
@@ -28,16 +30,23 @@ prime = read_hex(raw_prime)
 
 
 # Project TODO: Implement this function!
+
+
 def create_dh_key() -> Tuple[int, int]:
     # Creates a Diffie-Hellman key
     # Returns (public, private)
-    p = read_hex(raw_prime)
-    g = 2  # RFC 3526中定义的生成器
-    # generate private key
-    private_key = random.randint(2, p - 2)
+
+    # Generator
+    gen = 2
+
+    # 128-bit random private key
+    random.seed(datetime.datetime.now())
+    priv_key = random.getrandbits(128)
+
     # generate public key
-    public_key = modexp(g, private_key, p)
-    return public_key,private_key
+    pub_key = pow(gen, priv_key, prime)
+
+    return pub_key, priv_key
 
 
 def calculate_dh_secret(their_public: int, my_private: int) -> bytes:
@@ -52,27 +61,3 @@ def calculate_dh_secret(their_public: int, my_private: int) -> bytes:
     # Feel free to change SHA256 to a different value if more appropriate
     shared_hash = SHA256.new(str(shared_secret).encode()).digest()
     return shared_hash
-
-
-def modexp(base, exponent, modulus):
-    result = 1
-    while exponent > 0:
-        if exponent % 2 == 1:
-            result = (result * base) % modulus
-        exponent = exponent >> 1
-        base = (base * base) % modulus
-    return result
-
-
-if __name__ == "__main__":
-    alice_public_key, alice_private_key= create_dh_key()
-    bob_public_key , bob_private_key= create_dh_key()
-
-    alice_shared_secret = calculate_dh_secret(bob_public_key,alice_private_key)
-    bob_shared_secret = calculate_dh_secret(alice_public_key,bob_private_key)
-
-
-    # 打印共享的密钥材料
-    print("Alice Shared Secret:", alice_shared_secret)
-    print("Bob Shared Secret:", bob_shared_secret)
-

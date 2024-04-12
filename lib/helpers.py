@@ -25,11 +25,6 @@ def appendMac(data, secret):
     h.update(data)
     new_h = bytes.fromhex(h.hexdigest())
 
-    print()
-    print("THIS IS THE MAC THAT WAS ADDED")
-    print(new_h)
-
-    # return data + b'\x00' + new_h
     return data + new_h
 
 

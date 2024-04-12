@@ -52,7 +52,7 @@ def create_dh_key() -> Tuple[int, int]:
 def calculate_dh_secret(their_public: int, my_private: int) -> bytes:
     # Calculate the shared secret
     prime = read_hex(raw_prime)
-    shared_secret = modexp(their_public, my_private, prime)  # as per rfc2631.
+    shared_secret = pow(their_public, my_private, prime)  # as per rfc2631.
     # Hash the value so that:
     # (a) There's no bias in the bits of the output
     #     (there may be bias if the shared secret is used raw)

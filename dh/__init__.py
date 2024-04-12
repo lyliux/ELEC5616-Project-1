@@ -1,7 +1,6 @@
 from typing import Tuple
 from Crypto.Hash import SHA256
 from lib.helpers import read_hex
-
 import random
 import datetime
 
@@ -29,6 +28,7 @@ raw_prime = """FFFFFFFF FFFFFFFF C90FDAA2 2168C234 C4C6628B 80DC1CD1
 # Convert from the value supplied in the RFC to an integer
 prime = read_hex(raw_prime)
 
+
 # Project TODO: Implement this function!
 
 
@@ -51,8 +51,8 @@ def create_dh_key() -> Tuple[int, int]:
 
 def calculate_dh_secret(their_public: int, my_private: int) -> bytes:
     # Calculate the shared secret
-    shared_secret = pow(their_public, my_private, prime)  # as per rfc2631.
-
+    prime = read_hex(raw_prime)
+    shared_secret = modexp(their_public, my_private, prime)  # as per rfc2631.
     # Hash the value so that:
     # (a) There's no bias in the bits of the output
     #     (there may be bias if the shared secret is used raw)

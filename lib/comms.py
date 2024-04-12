@@ -1,11 +1,26 @@
+import hashlib
 import struct
 import secrets
 
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
 from dh import create_dh_key, calculate_dh_secret
-from .xor import XOR
+
+from Crypto.Cipher import AES
+
 from lib.helpers import appendMac, macCheck, appendSalt, generate_random_string
 from Crypto.Cipher import AES
 
+
+# Traditional modes of operations for symmetric ciphers:
+# ECB
+# CBC
+# CFB
+# OFB
+# CTR
+# OpenPGP (a variant of CFB, RFC4880)
 
 class StealthConn(object):
     def __init__(self, conn, client=False, server=False, verbose=False):
@@ -15,6 +30,7 @@ class StealthConn(object):
         self.verbose = True  # verbose
         self.shared_secret = None
         self.initiate_session()
+        self.black_list_map = {}
 
     def initiate_session(self):
         # Perform the initial connection handshake for agreeing on a shared secret
@@ -34,22 +50,13 @@ class StealthConn(object):
         if self.shared_secret:
             # Encrypt the message
             # Project TODO: Is XOR the best cipher here? Why not? Use a more secure cipher (from the pycryptodome library)
-
             # encrypt using AES (block mode ___) (CFB or OFB mode???)
-
-            # NOT FINISHED!
-            # use nonce to avoid replay attacks
-            # key = b'Sixteen byte key'
-            # cipher = AES.new(key, AES.MODE_EAX)
-            # nonce = cipher.nonce
-            # data_to_send, tag = cipher.encrypt_and_digest(data)
-
-            cipher = XOR(self.shared_secret)
 
             # Append MAC onto end of message, deliminate with hex byte 03
             before_encrypt = data
             before_encrypt = appendMac(before_encrypt, self.shared_secret)
-            data_to_send = cipher.encrypt(before_encrypt)
+            data_to_send = aes_encrypt(self.shared_secret, before_encrypt).encode()
+#             data_to_send = aes_encrypt(self.shared_secret, before_encrypt)
 
             if self.verbose:
                 print()
@@ -71,15 +78,27 @@ class StealthConn(object):
         pkt_len_packed = self.conn.recv(struct.calcsize("H"))
         unpacked_contents = struct.unpack("H", pkt_len_packed)
         pkt_len = unpacked_contents[0]
-
         if self.shared_secret:
-
-            encrypted_data = self.conn.recv(pkt_len)
+            encrypted_data_with_mac = self.conn.recv(pkt_len)
+            ## check MAC
+            MAC_INFO = encrypted_data_with_mac[-32:]
+            encrypted_data = encrypted_data_with_mac[:-32]
+            # print("---------------")
+            # print(MAC_INFO)
+            # print(encrypted_data)
+            # print(self.shared_secret)
+            # print(calculate_mac(self.shared_secret, encrypted_data).encode())
+            if MAC_INFO != calculate_mac(self.shared_secret, encrypted_data).encode():
+            # print("对对对对赌地")
+                print("MAC verification error")
+                # self.black_list_map[self.conn.getsockname()]
+                # count = self.black_list_map.get(self.conn.getsockname(),)
+                ## task 4 if ip try too many times in Error MAC, put the ip in black list
+                return "MAC error"
             # Project TODO: as in send(), change the cipher here.
-            cipher = XOR(self.shared_secret)
 
             # Split original message from HMAC
-            decoded_message = cipher.decrypt(encrypted_data)
+            decoded_message = aes_decrypt(self.shared_secret, encrypted_data)
             original_msg = b''
             hmac = b''
             deliminator = False
@@ -87,15 +106,6 @@ class StealthConn(object):
 
             for byte in reversed(decoded_message):
                 byte = byte.to_bytes(1, "big")
-                print(byte)
-                print(SHA256_counter)
-
-                # if byte == b'\x00':
-                #     deliminator = True
-                # elif deliminator:
-                #     hmac += byte
-                # else:
-                #     original_msg += byte
 
                 if SHA256_counter > 31:
                     original_msg = byte + original_msg
@@ -104,19 +114,11 @@ class StealthConn(object):
 
                 SHA256_counter += 1
 
-            print()
-            print("splitted")
-            print(original_msg)
-            print(hmac)
-
             # Perform MAC check on incoming message
             if not macCheck(original_msg, hmac, self.shared_secret):
                 print()
                 print("MAC Authentication failed")
                 # return ""
-            else:
-                print()
-                print("YIPPEPEEEEPEPEE!!!!")
 
             if self.verbose:
                 print()
@@ -130,6 +132,36 @@ class StealthConn(object):
             original_msg = self.conn.recv(pkt_len)
 
         return original_msg
+    ## md5(concat share.screct key.hen()  + data ) as MAC
 
     def close(self):
         self.conn.close()
+
+
+def aes_encrypt(key, plaintext):
+    # 使用共享密钥作为 AES 密钥
+    backend = default_backend()
+    cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=backend)
+    encryptor = cipher.encryptor()
+
+    # 添加填充
+    padder = padding.PKCS7(algorithms.AES.block_size).padder()
+    padded_plaintext = padder.update(plaintext) + padder.finalize()
+
+    ciphertext = encryptor.update(padded_plaintext) + encryptor.finalize()
+    return ciphertext
+
+
+def aes_decrypt(key, ciphertext):
+    # 使用共享密钥作为 AES 密钥
+    backend = default_backend()
+    cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=backend)
+    decryptor = cipher.decryptor()
+
+    padded_plaintext = decryptor.update(ciphertext) + decryptor.finalize()
+
+    # 删除填充
+    unpadder = padding.PKCS7(algorithms.AES.block_size).unpadder()
+    plaintext = unpadder.update(padded_plaintext) + unpadder.finalize()
+
+    return plaintext

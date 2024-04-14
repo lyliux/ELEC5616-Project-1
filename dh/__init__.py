@@ -2,6 +2,7 @@ from typing import Tuple
 from Crypto.Hash import SHA256
 from lib.helpers import read_hex
 import random
+import secrets
 import datetime
 
 # Project TODO: Is this the best choice of prime? Why? Why not? Feel free to replace this!

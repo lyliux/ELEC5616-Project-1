@@ -1,8 +1,6 @@
 import hashlib
 import struct
 import secrets
-import random
-from datetime import datetime
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
@@ -10,19 +8,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from dh import create_dh_key, calculate_dh_secret
 
-from Crypto.Cipher import AES
-
 from lib.helpers import appendMac, macCheck, appendSalt, generate_random_string
-from Crypto.Cipher import AES
-
-
-# Traditional modes of operations for symmetric ciphers:
-# ECB
-# CBC
-# CFB
-# OFB
-# CTR
-# OpenPGP (a variant of CFB, RFC4880)
 
 class StealthConn(object):
     def __init__(self, conn, client=False, server=False, verbose=False):
@@ -31,8 +17,8 @@ class StealthConn(object):
         self.server = server
         self.verbose = True  # verbose
         self.shared_secret = None
+        self.nonce = b''  # acts both as a nonce and IV for AES OFB mode encryption
         self.initiate_session()
-
 
     def initiate_session(self):
         # Perform the initial connection handshake for agreeing on a shared secret
@@ -48,19 +34,21 @@ class StealthConn(object):
             self.shared_secret = calculate_dh_secret(their_public_key, my_private_key)
             print("Shared hash: {}".format(self.shared_secret.hex()))
 
+
     def send(self, data):
         if self.shared_secret:
-            # Encrypt the message
-            # Project TODO: Is XOR the best cipher here? Why not? Use a more secure cipher (from the pycryptodome library)
-            # encrypt using AES (block mode ___) (CFB or OFB mode???)
 
-            # Append MAC onto end of message, deliminate with hex byte 03
+            # Gets nonce from receiver and stores in self.nonce
+            self.receive_nonce()
+
             before_encrypt = data
-            random.seed(datetime.datetime.now())
-            nonce = random.getrandbits(16)
-            before_encrypt += nonce
+
+            # Append MAC onto end of message, and encrypt using AES (iv appended)
             before_encrypt = appendMac(before_encrypt, self.shared_secret)
-            data_to_send = aes_encrypt(self.shared_secret, before_encrypt)
+
+            # Encrypt the message using AES (block mode OFB)
+            # form: iv/nonce(16 bytes) + ciphertext(plaintext + MAC(16 bytes))
+            data_to_send = self.aes_encrypt(self.shared_secret, before_encrypt)
 
             if self.verbose:
                 print()
@@ -78,38 +66,50 @@ class StealthConn(object):
         self.conn.sendall(data_to_send)
 
     def recv(self):
+        # Send nonce to sending party if shared secret has been established
+        if self.shared_secret:
+            self.send_nonce()
+
         # Decode the data's length from an unsigned two byte int ('H')
         pkt_len_packed = self.conn.recv(struct.calcsize("H"))
         unpacked_contents = struct.unpack("H", pkt_len_packed)
         pkt_len = unpacked_contents[0]
-        if self.shared_secret:
 
+        if self.shared_secret:
             encrypted_data = self.conn.recv(pkt_len)
 
-            # Decrypt the recieved data
-            decoded_message = aes_decrypt(self.shared_secret, encrypted_data)
+            # Retrieve iv/nonce and split from encrypted data
+            iv = encrypted_data[:16]
+            encrypted_data = encrypted_data[16:]
+
+            # Decrypt the received data
+            decoded_message = self.aes_decrypt(self.shared_secret, encrypted_data, iv)
 
             # Split original message from HMAC
             original_msg = b''
             hmac = b''
-            SHA256_counter = 1
+            SHA256_counter = 0
 
             for byte in reversed(decoded_message):
                 byte = byte.to_bytes(1, "big")
-
-                if SHA256_counter == 32:
-                    nonce = byte
-                elif SHA256_counter > 32:
+                # 32 as each ascii character is 2 bytes
+                if SHA256_counter >= 32:
                     original_msg = byte + original_msg
                 else:
                     hmac = byte + hmac
-
                 SHA256_counter += 1
 
             # Perform MAC check on incoming message
             if not macCheck(original_msg, hmac, self.shared_secret):
                 print()
                 print("MAC Authentication failed")
+                return ""
+
+            # Check the nonce that was sent matches the one that was included in
+            # the message we just received
+            if not self.nonce == iv:
+                print()
+                print("Nonce is different, attempted replay")
                 return ""
 
             if self.verbose:
@@ -125,33 +125,62 @@ class StealthConn(object):
 
         return original_msg
 
+    """
+    Send randomly generated 16 byte nonce
+    """
+    def send_nonce(self):
+        nonce = secrets.token_bytes(16)
+        self.conn.sendall(nonce)
+        self.nonce = nonce
+
+    """
+    Receive 16 byte nonce
+    """
+    def receive_nonce(self):
+        nonce = self.conn.recv(16)
+        self.nonce = nonce
+
     def close(self):
         self.conn.close()
 
+    """
+    Encrypt plaintext using AES (OFB mode) encryption  
+    """
+    def aes_encrypt(self, key, plaintext):
+        # use shared key as key of AES
+        backend = default_backend()
 
-def aes_encrypt(key, plaintext):
-    # use shared key as key of AES
-    backend = default_backend()
-    cipher = Cipher(algorithms.AES(key), modes.OFB(), backend=backend)
-    encryptor = cipher.encryptor()
-    # add padding
-    padder = padding.PKCS7(algorithms.AES.block_size).padder()
-    padded_plaintext = padder.update(plaintext) + padder.finalize()
+        # we use the nonce as the IV as well
+        cipher = Cipher(algorithms.AES(key), modes.OFB(self.nonce), backend=backend)
+        encryptor = cipher.encryptor()
 
-    ciphertext = encryptor.update(padded_plaintext) + encryptor.finalize()
-    return ciphertext
+        # add padding
+        padder = padding.PKCS7(algorithms.AES.block_size).padder()
+        padded_plaintext = padder.update(plaintext) + padder.finalize()
 
+        # finalise cipher text
+        ciphertext = encryptor.update(padded_plaintext) + encryptor.finalize()
 
-def aes_decrypt(key, ciphertext):
-    # use shared key as key of AES
-    backend = default_backend()
-    cipher = Cipher(algorithms.AES(key), modes.OFB(), backend=backend)
-    decryptor = cipher.decryptor()
+        # add iv on the front
+        ciphertext = self.nonce + ciphertext
 
-    padded_plaintext = decryptor.update(ciphertext) + decryptor.finalize()
+        return ciphertext
 
-    # delete padding
-    unpadder = padding.PKCS7(algorithms.AES.block_size).unpadder()
-    plaintext = unpadder.update(padded_plaintext) + unpadder.finalize()
+    """
+        Decrypt plaintext using AES (OFB mode) encryption  
+    """
+    def aes_decrypt(self, key, ciphertext, iv):
+        # use shared key as key of AES
+        backend = default_backend()
 
-    return plaintext
+        # we use the nonce as the IV as well
+        cipher = Cipher(algorithms.AES(key), modes.OFB(iv), backend=backend)
+        decryptor = cipher.decryptor()
+
+        padded_plaintext = decryptor.update(ciphertext) + decryptor.finalize()
+
+        # delete padding
+        unpadder = padding.PKCS7(algorithms.AES.block_size).unpadder()
+        plaintext = unpadder.update(padded_plaintext) + unpadder.finalize()
+
+        return plaintext
